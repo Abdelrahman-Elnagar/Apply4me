@@ -17,19 +17,18 @@ let currentMockInterview = null;
 
 // Personal information cache (used to augment AI prompts)
 let personalInfoCache = null;
+let userCVTexCache = null;
 function loadPersonalInformation() {
-  if (personalInfoCache !== null) return personalInfoCache;
-  try {
-    const infoPath = path.join(__dirname, 'personal information.txt');
-    if (fs.existsSync(infoPath)) {
-      personalInfoCache = fs.readFileSync(infoPath, 'utf8');
-    } else {
-      personalInfoCache = '';
-    }
-  } catch (e) {
-    personalInfoCache = '';
+  // Do not read from disk; rely only on in-memory cache set via /api/personal-info
+  return typeof personalInfoCache === 'string' ? personalInfoCache : '';
+}
+
+function getActiveCVTemplate() {
+  // If user uploaded a CV, use it; otherwise use default
+  if (userCVTexCache && typeof userCVTexCache === 'string' && userCVTexCache.includes('\\documentclass')) {
+    return userCVTexCache;
   }
-  return personalInfoCache;
+  return DEFAULT_CV_TEMPLATE;
 }
 
 // Middleware
@@ -1233,6 +1232,37 @@ app.post('/api/configure', (req, res) => {
   }
 });
 
+// Save personal information (overrides cache; ephemeral in-memory for now)
+app.post('/api/personal-info', (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || typeof text !== 'string' || text.trim().length < 10) {
+      return res.status(400).json({ success: false, error: 'Personal info too short' });
+    }
+    personalInfoCache = text.trim();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Upload CV .tex (multer)
+app.post('/api/upload-cv-tex', upload.single('cvTex'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+    const content = req.file.buffer.toString('utf8');
+    if (!content.includes('\\documentclass')) {
+      return res.status(400).json({ success: false, error: 'Invalid .tex file' });
+    }
+    userCVTexCache = content;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Main optimization endpoint
 app.post('/api/optimize-cv', async (req, res) => {
   try {
@@ -1265,7 +1295,7 @@ app.post('/api/optimize-cv', async (req, res) => {
     console.log('CV | Step 2: Parsing CV content...');
     let cvData;
     try {
-      cvData = await parseCVContent(DEFAULT_CV_TEMPLATE);
+      cvData = await parseCVContent(getActiveCVTemplate());
     } catch (error) {
       console.log('CV | CV parsing failed, using fallback...');
       cvData = {
@@ -1459,7 +1489,7 @@ app.post('/api/start-mock-interview', async (req, res) => {
     // Parse CV content
     let cvData;
     try {
-      cvData = await parseCVContent(DEFAULT_CV_TEMPLATE);
+      cvData = await parseCVContent(getActiveCVTemplate());
     } catch (error) {
       console.log('MOCK | CV parsing failed, using fallback...');
       cvData = {
@@ -1826,7 +1856,7 @@ app.post('/api/variant-answer', async (req, res) => {
     // Build context from CV and personal information
     let cvData;
     try {
-      cvData = await parseCVContent(DEFAULT_CV_TEMPLATE);
+      cvData = await parseCVContent(getActiveCVTemplate());
     } catch (_) {
       cvData = {};
     }

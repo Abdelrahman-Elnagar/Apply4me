@@ -1249,6 +1249,32 @@
         </div>
 
         <div class="main-content">
+            <!-- Profile Setup Section -->
+            <div class="section">
+                <div class="section-header">
+                    <i class="fas fa-user"></i>
+                    <h3>PROFILE SETUP</h3>
+                </div>
+                <div class="section-content">
+                    <div class="preferences-grid">
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="tooltip" data-tooltip="Paste your personal profile; used to personalize answers">PERSONAL INFORMATION</label>
+                            <textarea id="personalInfoInput" placeholder="Paste your personal profile here..."></textarea>
+                            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                                <button class="btn" onclick="savePersonalInfo()"><i class="fas fa-save"></i> SAVE PERSONAL INFO</button>
+                            </div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label class="tooltip" data-tooltip="Upload your LaTeX CV (.tex). The system will use this instead of the default.">UPLOAD LATEX CV</label>
+                            <input type="file" id="cvUpload" accept=".tex">
+                            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                                <button class="btn" onclick="uploadCVTex()"><i class="fas fa-upload"></i> UPLOAD CV</button>
+                            </div>
+                            <small style="color: var(--text-secondary); display:block; margin-top:8px;">Supported: .tex file. Content is processed on the server; not shared elsewhere.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <!-- Configuration Section -->
             <div class="section">
                 <div class="section-header">
@@ -2720,6 +2746,55 @@
             `;
             document.head.appendChild(style);
         });
+
+        // Profile Setup: save personal info
+        async function savePersonalInfo() {
+            const text = document.getElementById('personalInfoInput').value.trim();
+            if (!text) {
+                showAlert('PLEASE ENTER PERSONAL INFORMATION', 'error');
+                return;
+            }
+            try {
+                const res = await fetch('/api/personal-info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('PERSONAL INFO SAVED', 'success');
+                } else {
+                    showAlert('SAVE FAILED: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                showAlert('SAVE FAILED: ' + e.message, 'error');
+            }
+        }
+
+        // Profile Setup: upload CV .tex
+        async function uploadCVTex() {
+            const fileInput = document.getElementById('cvUpload');
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showAlert('PLEASE CHOOSE A .TEX FILE', 'error');
+                return;
+            }
+            const formData = new FormData();
+            formData.append('cvTex', fileInput.files[0]);
+            try {
+                const res = await fetch('/api/upload-cv-tex', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showAlert('CV UPLOADED', 'success');
+                } else {
+                    showAlert('UPLOAD FAILED: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (e) {
+                showAlert('UPLOAD FAILED: ' + e.message, 'error');
+            }
+        }
 
         // Answer Crafter: frontend handler
         async function generateVariantAnswer() {
